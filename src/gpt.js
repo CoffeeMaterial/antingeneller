@@ -2,6 +2,7 @@ import axios from "axios";
 
 const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
+
 export async function fetchGPTQuestion() {
   try {
     const response = await axios.post(
