@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchGPTQuestion } from "./gpt";
+import { supabase } from "./supabase";
 import "./App.css";
-// import AdBanner from "./adbanner";
 
 function App() {
   const [questions, setQuestions] = useState([]);
@@ -10,16 +10,46 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadNewQuestion();
+    loadExistingQuestions();
   }, []);
+
+  async function loadExistingQuestions() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("questions")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (!error && data.length > 0) {
+      setQuestions(data);
+      setCurrentQuestion(data[0]);
+    } else {
+      console.error("Failed to load questions:", error);
+    }
+    setLoading(false);
+  }
 
   async function loadNewQuestion() {
     setLoading(true);
     setShowStats(false);
     try {
       const gptQuestion = await fetchGPTQuestion();
-      setCurrentQuestion(gptQuestion);
-      setQuestions((prev) => [...prev, gptQuestion]);
+      const { data, error } = await supabase.from("questions").insert([
+        {
+          option1: gptQuestion.option1,
+          option2: gptQuestion.option2,
+          votes1: 0,
+          votes2: 0,
+        },
+      ]);
+
+      if (!error && data && data.length > 0) {
+        const savedQuestion = data[0];
+        setCurrentQuestion({ ...savedQuestion, votes: { option1: 0, option2: 0 } });
+        setQuestions((prev) => [savedQuestion, ...prev]);
+      } else {
+        console.error("Failed to save question:", error);
+      }
     } catch (err) {
       console.error("Failed to fetch GPT question:", err);
     } finally {
@@ -34,7 +64,7 @@ function App() {
     const updated = { ...currentQuestion, votes: updatedVotes };
     setCurrentQuestion(updated);
     setQuestions((prev) =>
-      prev.map((q, idx) => (idx === prev.length - 1 ? updated : q))
+      prev.map((q) => (q.id === currentQuestion.id ? updated : q))
     );
     setShowStats(true);
   }
@@ -88,13 +118,13 @@ function App() {
       {questions.length > 1 && (
         <div className="history">
           <h2>Tidigare frågor</h2>
-          {questions.slice(0, -1).map((q, i) => (
-            <div key={i} className="previous">
+          {questions.slice(1).map((q) => (
+            <div key={q.id} className="previous">
               <p><strong>1:</strong> {q.option1}</p>
               <p><strong>2:</strong> {q.option2}</p>
               <p>
-                Resultat: {getPercentage(q.votes.option1, getTotalVotes(q))}% /
-                {getPercentage(q.votes.option2, getTotalVotes(q))}%
+                Resultat: {getPercentage(q.votes?.option1 || q.votes1, getTotalVotes(q))}% /
+                {getPercentage(q.votes?.option2 || q.votes2, getTotalVotes(q))}%
               </p>
               <hr />
             </div>
@@ -106,4 +136,3 @@ function App() {
 }
 
 export default App;
-
