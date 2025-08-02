@@ -49,8 +49,8 @@ function App() {
   if (loading && !currentQuestion) {
     return (
       <div className="container">
-        <h1>Antingen eller 18+</h1>
-        <p>Laddar ny fråga från AI...</p>
+        <h1>Antingen eller 18+!</h1>
+        <p>Håller på...</p>
       </div>
     );
   }
@@ -105,3 +105,4 @@ function App() {
 }
 
 export default App;
+
