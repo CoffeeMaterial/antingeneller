@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchGPTQuestion } from "./gpt";
 import "./App.css";
+// import AdBanner from "./adbanner";
 
 function App() {
   const [questions, setQuestions] = useState([]);
@@ -49,7 +50,7 @@ function App() {
   if (loading && !currentQuestion) {
     return (
       <div className="container">
-        <h1>Antingen eller 18+!</h1>
+        <h1>Antingen eller 18+</h1>
         <p>Håller på...</p>
       </div>
     );
