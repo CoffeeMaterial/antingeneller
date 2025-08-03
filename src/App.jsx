@@ -160,13 +160,12 @@ function App() {
 
   return (
     <div className="container">
-      <h1>Antingen eller 18+</h1>
+      <h2>Antingen eller 18+</h2>
 
       {currentQuestion && (
         <div className="question">
-          <p>{currentQuestion.option1}</p>
-          <p>ELLER</p>
-          <p>{currentQuestion.option2}</p>
+          <p>Antingen {currentQuestion.option1}</p>
+          <p>eller {currentQuestion.option2}</p>
         </div>
       )}
 
