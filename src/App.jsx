@@ -8,34 +8,10 @@ function App() {
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [showStats, setShowStats] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [supabaseStatus, setSupabaseStatus] = useState("🔴 Supabase disconnected");
-  const [gptStatus, setGptStatus] = useState("🔴 GPT disconnected");
 
   useEffect(() => {
-    checkSupabaseConnection();
-    checkGPTConnection();
     loadExistingQuestions();
   }, []);
-
-  async function checkSupabaseConnection() {
-    try {
-      const { error } = await supabase.from("questions").select("id").limit(1);
-      if (!error) setSupabaseStatus("🟢 Supabase connected");
-    } catch (err) {
-      console.error("Supabase check error:", err);
-    }
-  }
-
-  async function checkGPTConnection() {
-    try {
-      const result = await fetchGPTQuestion();
-      if (result?.option1 && result?.option2) {
-        setGptStatus("🟢 GPT connected");
-      }
-    } catch (err) {
-      console.error("GPT check error:", err);
-    }
-  }
 
   async function loadExistingQuestions() {
     setLoading(true);
@@ -45,26 +21,60 @@ function App() {
       .order("created_at", { ascending: false });
 
     if (!error && data && data.length > 0) {
-      const formatted = data.map((q) => ({
+      const formatted = data.map(q => ({
         ...q,
         votes: {
           option1: q.votes1 || 0,
-          option2: q.votes2 || 0,
-        },
+          option2: q.votes2 || 0
+        }
       }));
       setQuestions(formatted);
       setCurrentQuestion(formatted[0]);
     } else {
+      console.error("Failed to load questions:", error);
       setCurrentQuestion(null);
     }
-
     setLoading(false);
   }
 
   async function loadNewQuestion() {
     setLoading(true);
     setShowStats(false);
+
+    const reuseProbability = 0.3;
+    const shouldReuse = Math.random() < reuseProbability;
+
     try {
+      if (shouldReuse) {
+        const usedIds = questions.map((q) => q.id);
+
+        for (let i = 0; i < 5; i++) {
+          const { data, error } = await supabase
+            .from("questions")
+            .select("*")
+            .order("random()")
+            .limit(1);
+
+          if (!error && data && data.length > 0) {
+            const reused = data[0];
+            if (!usedIds.includes(reused.id)) {
+              const formatted = {
+                ...reused,
+                votes: {
+                  option1: reused.votes1 || 0,
+                  option2: reused.votes2 || 0,
+                },
+              };
+              setCurrentQuestion(formatted);
+              setQuestions((prev) => [formatted, ...prev]);
+              return;
+            }
+          }
+        }
+
+        console.log("No new reusable questions found, falling back to GPT");
+      }
+
       const gptQuestion = await fetchGPTQuestion();
       const { data, error } = await supabase
         .from("questions")
@@ -79,15 +89,17 @@ function App() {
         .select();
 
       if (!error && data && data.length > 0) {
-        const saved = {
+        const savedQuestion = {
           ...data[0],
           votes: { option1: 0, option2: 0 },
         };
-        setCurrentQuestion(saved);
-        setQuestions((prev) => [saved, ...prev]);
+        setCurrentQuestion(savedQuestion);
+        setQuestions((prev) => [savedQuestion, ...prev]);
+      } else {
+        console.error("Failed to save GPT question:", error);
       }
     } catch (err) {
-      console.error("GPT fetch error:", err);
+      console.error("Failed to load question:", err);
     } finally {
       setLoading(false);
     }
@@ -107,14 +119,14 @@ function App() {
 
     setCurrentQuestion(updated);
     setQuestions((prev) =>
-      prev.map((q) => (q.id === updated.id ? updated : q))
+      prev.map((q) => (q.id === currentQuestion.id ? updated : q))
     );
     setShowStats(true);
 
     const { error } = await supabase
       .from("questions")
       .update({ votes1: updated.votes1, votes2: updated.votes2 })
-      .eq("id", updated.id);
+      .eq("id", currentQuestion.id);
 
     if (error) console.error("Failed to save vote:", error);
   }
@@ -132,8 +144,6 @@ function App() {
       <div className="container">
         <h1>Antingen eller 18+</h1>
         <p>Hämtar frågor...</p>
-        <p>{supabaseStatus}</p>
-        <p>{gptStatus}</p>
       </div>
     );
   }
@@ -142,9 +152,7 @@ function App() {
     return (
       <div className="container">
         <h1>Antingen eller 18+</h1>
-        <p>Inga frågor ännu.</p>
-        <p>{supabaseStatus}</p>
-        <p>{gptStatus}</p>
+        <p>Inga frågor tillgängliga just nu.</p>
         <button onClick={loadNewQuestion}>Skapa första frågan</button>
       </div>
     );
@@ -153,14 +161,14 @@ function App() {
   return (
     <div className="container">
       <h1>Antingen eller 18+</h1>
-      <p>{supabaseStatus}</p>
-      <p>{gptStatus}</p>
 
-      <div className="question">
-        <p>{currentQuestion.option1}</p>
-        <p>ELLER</p>
-        <p>{currentQuestion.option2}</p>
-      </div>
+      {currentQuestion && (
+        <div className="question">
+          <p>{currentQuestion.option1}</p>
+          <p>ELLER</p>
+          <p>{currentQuestion.option2}</p>
+        </div>
+      )}
 
       {!showStats ? (
         <div className="buttons">
@@ -170,20 +178,10 @@ function App() {
       ) : (
         <div className="stats">
           <p>
-            Alternativ 1:{" "}
-            {getPercentage(
-              currentQuestion.votes.option1,
-              getTotalVotes(currentQuestion)
-            )}
-            %
+            Alternativ 1: {getPercentage(currentQuestion.votes.option1, getTotalVotes(currentQuestion))}%
           </p>
           <p>
-            Alternativ 2:{" "}
-            {getPercentage(
-              currentQuestion.votes.option2,
-              getTotalVotes(currentQuestion)
-            )}
-            %
+            Alternativ 2: {getPercentage(currentQuestion.votes.option2, getTotalVotes(currentQuestion))}%
           </p>
           <button onClick={loadNewQuestion}>Nästa fråga</button>
         </div>
@@ -197,7 +195,7 @@ function App() {
               <p><strong>1:</strong> {q.option1}</p>
               <p><strong>2:</strong> {q.option2}</p>
               <p>
-                Resultat: {getPercentage(q.votes.option1, getTotalVotes(q))}% /{" "}
+                Resultat: {getPercentage(q.votes.option1, getTotalVotes(q))}% /
                 {getPercentage(q.votes.option2, getTotalVotes(q))}%
               </p>
               <hr />
